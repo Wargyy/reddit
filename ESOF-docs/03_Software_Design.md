@@ -13,7 +13,7 @@ https://github.com/Wargyy/reddit
 
 * [Packages Diagram](#packages-diagram)
 * [Components Diagram](#components-diagram)
-* [Deployment](#deployment)
+* [Deployment Diagram](#deployment-diagram)
 * [Activity Diagram](#activity-diagram)
 
 [... Return to Chapter Select](Chapter_Select.md)
@@ -24,7 +24,7 @@ https://github.com/Wargyy/reddit
 ## Components Diagram
 ![Components Diagram](./diagrams/ComponentDiagram.png)
 
-## Deployment
+## Deployment Diagram
 ![Deployment Diagram](./diagrams/DeploymentDiagram.png)
 
 ## Activity Diagram
