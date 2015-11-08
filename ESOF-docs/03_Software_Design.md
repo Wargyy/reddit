@@ -28,5 +28,6 @@ https://github.com/Wargyy/reddit
 ![Deployment Diagram](./diagrams/DeploymentDiagram.png)
 
 ## Activity Diagram
+![Activity Diagram](http://i.imgur.com/sS7o3hD.png)
 
 
