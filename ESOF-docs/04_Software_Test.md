@@ -8,6 +8,7 @@ https://github.com/Wargyy/reddit
 * Diogo Cardoso
 * Pedro Albano
 * Pedro Faria
+
 ## Navigation
 
 * 
