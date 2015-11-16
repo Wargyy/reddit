@@ -1,4 +1,4 @@
-# Software Engineering - Reddit
+# Software Test - Reddit
 https://github.com/Wargyy/reddit
 
 **Year:** 2015 **Class:** 3MIEIC3
