@@ -19,7 +19,7 @@ https://github.com/Wargyy/reddit
 [... Return to Chapter Select](Chapter_Select.md)
 
 ## Packages Diagram
-![Packages Diagram](./diagrams/packagesdiagram.png)
+![Packages Diagram](./diagrams/PackageDiagram.png)
 
 ## Components Diagram
 ![Components Diagram](./diagrams/ComponentDiagram.png)
@@ -28,6 +28,6 @@ https://github.com/Wargyy/reddit
 ![Deployment Diagram](./diagrams/DeploymentDiagram.png)
 
 ## Activity Diagram
-![Activity Diagram](http://i.imgur.com/sS7o3hD.png)
+![Activity Diagram](./diagrams/ActivityDiagram.png)
 
 
