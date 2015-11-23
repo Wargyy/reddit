@@ -52,3 +52,17 @@ The testability of software components (modules, classes) is determined by facto
   Code coverage: is it any good? (see http://avandeursen.com/2013/11/19/test-coverage-not-for-managers/)
 
 3) [Opcional] Take a bug report, create test cases to reproduce it, and fix it, eventually using automated software fault diagnosis techniques. (grade >18)
+
+#### 5.
+Boa tarde,
+
+Após a entrega do trabalho prático ontem, resta apenas mais um trabalho prático (e apresentação). Para este último trabalho, talvez o mais trabalhoso, o que vos é pedido é o seguinte:
+
+- Identificar uma feature que deva ser evoluida
+- Identificar componentes que implementam essa feature
+- Evoluir a feature, verificando que as restantes funcionalidades não são quebradas
+- Submeter um patch
+
+Continuação de bom trabalho.
+Cumprimentos,
+Rui Maranhão.
