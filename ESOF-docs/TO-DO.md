@@ -44,3 +44,21 @@ Continuação de bom trabalho.
 Cumprimentos,
 Rui Maranhão.
 ```
+
+Boa tarde,
+
+Informo que o prazo para submissão do último trabalho prático passou a ser no dia 13 de dezembro de 2015 (uma semana mais tarde do que foi planeado).
+
+Podem ainda, se assim entenderem, melhorar os restantes trabalhos até ao mesmo dia da entrega do último trabalho. Se decidirem melhorar qualquer trabalho anterior, enviem um email ao docente das práticas informando-o das alterações.
+
+Na última aula prática terá lugar a uma apresentação, com slides, do trabalho: 5 minutos + 5 minutos de Q&A.
+
+Continuação de bom trabalho.
+
+~RMA.
+
+     --------------------------------------------------------------------
+     Esta mensagem foi enviada a pedido de 466651 - Rui Maranhão para potencialmente 124 pessoas.
+
+     Sistema de Email Dinâmico do SIGARRA - FEUP
+     --------------------------------------------------------------------
