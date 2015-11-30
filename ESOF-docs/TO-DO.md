@@ -2,7 +2,8 @@
 1. Try to find the approximate development process used by analysing the repository/code.
 
 #### 2. Requirement Elicitation and Domain/Use-Cases Diagram
-1. Rewrite the Requirement part with the following guidelines
+1. Rewrite the Requirement part with the following guidelines below.
+2. Make the domain and use-case diagrams
 
 ```
 Requisitos
@@ -16,20 +17,15 @@ e tem uma pagina/subreddit propria para sugestões, feature requests.
 dedicado para isso.
 ```
 
-2. Make the domain and use-case diagrams
-
 Software:
 http://staruml.io/ <-- Mentioned in email by the Prof.
 Enterprise Architect, Anything that makes Standard UML diagramas.
 
 #### 3. Software Design: Architecture, frameworks, etc
-
-Chapter OK.
+Done!
 
 #### 4. Report of software Test
-
-1. Test Statistics
-  % coverage (given by tools like EclEmma)
+1. Test Statistics: Add % coverage (given by tools like EclEmma)
 
 #### 5. Feature Evolution
 1. Improve a feature in the software and submit a pull request with it.
