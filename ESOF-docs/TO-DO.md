@@ -62,3 +62,12 @@ Continuação de bom trabalho.
 
      Sistema de Email Dinâmico do SIGARRA - FEUP
      --------------------------------------------------------------------
+     
+Boa tarde,
+
+Serve este email para esclarecer o que se pretende com a apresentação na próxima semana. O objetivo é terminar os trabalhos práticos como uma apresentação sobre o projeto que escolheram. O ênfase é naturalmente as fases do ciclo de vida de um projeto de software: requisitos, design, arquitetura, V&V, evolução. A duração da apresentação será de **5 minutos** e o apresentador será escolhido pelo docente.
+
+Até ao final da próxima semana devem ainda enviar um email (com todos os elementos do grupo em cc) para o docente das práticas com a auto-avaliação tanto do **grupo** como um todo, bem como **individual**. Um email por grupo.
+
+Cumprimentos,
+Rui Maranhão, Nuno Flores e Hugo Sereno.
