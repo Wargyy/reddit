@@ -20,7 +20,7 @@ https://github.com/Wargyy/reddit
 
 [... Return to Chapter Select](Chapter_Select.md)
 
-## Software Process Report
+## Software Development Process
 
 ###About reddit
 Reddit is an entertainment, social networking, and news website where registered community members can submit content, such as text posts or direct links, making it essentially an online bulletin board system. 
