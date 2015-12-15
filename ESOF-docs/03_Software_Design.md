@@ -18,6 +18,8 @@ https://github.com/Wargyy/reddit
 
 [... Return to Chapter Select](Chapter_Select.md)
 
+## Software Design
+
 ## Packages Diagram
 ![Packages Diagram](./diagrams/PackageDiagram.png)
 
