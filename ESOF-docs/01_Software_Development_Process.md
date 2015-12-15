@@ -68,26 +68,3 @@ Three years later the project was made available as open source software, and it
 ## Structure
 ####Development Process
 We were unable to locate information relative to the development process of the Reddit software, mainly because a most of its development happened during its closed source period, as of a fact, some of the current contributers acknowledge that there may not even be one process set for it.
-
-**TODO: Try to find the approximate development process used by analysing the repository/code.**
-
-**TODO: The following block of text is out of context/located in the wrong place**
-```
-###Scrum
-Scrum is a way of software development, where a team is required as solid to reach a goal.
-Basically this methodology involves several's sprints, 1 to 3 weeks, having each sprint the follow structure:
-
-1-Plan
-
-2-Build
-
-3-Test
-
-4-Review
-
-To get the final product its necessary 3 Rols. First its the Product owner, who will request the product and pay for it. In second we have the Scrum Master, its the one that will push for the team, helping ensuring success, removing impediments and supporting the team. Finally we have the team, who will build the project.
-
-In the final of each sprint, team will dispute a sprint review (where team can improve the product) and a sprint retrospective (where team can be improved).
-
-If the final product its built after the sprint, team can put the product ready for shippment.
-```
