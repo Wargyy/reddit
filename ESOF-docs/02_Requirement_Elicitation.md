@@ -18,11 +18,14 @@ https://github.com/Wargyy/reddit
 
 ## Requirement Elicitation
 
-Due to Reddit's nature of being an 'open to everyone' website, where users are able to share, review and comment their content, it makes the requirement elicitation process very straightforward.
+Reddit accepts contributions to their code by using pull requests to their repository, as long as these follow the code standards and rules they set to use in their software.
 
-By observing what the users share and how they do it, the service is developed towards improving the users experience, by adding new features or improving existing ones, making this Social Observation and Analysis technique most likely the main method to acquire information on the user's needs.
+Regarding issues and bugs, the repository's issue feature is only used to submit confirmed occurences of these, whereas unconfirmed and others, join suggestions and feature requests in a dedicated part of the website for this end, being that the 
+[ideasfortheadmins](https://www.reddit.com/r/ideasfortheadmins/) subreddit.
 
-Additionally, a part of the website, is dedicated for users to submit their suggestions and feature requests, this is done through the [ideasfortheadmins](https://www.reddit.com/r/ideasfortheadmins/) subreddit.
+Although these methods are available, they request that acknowledgements of more severe bugs and issues are sent to them using private channels, for security reasons.
+
+Additionally due to Reddit's nature of being an 'open to everyone' website, where users are able to share, review and comment their content, it allows developers to have an instant feedback on how to improve the users experience.
 
 ## Use-Cases Diagram
 ![Use-Cases Diagram](./diagrams/UseCaseDiagram.png)
