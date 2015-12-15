@@ -49,7 +49,7 @@ from account import (
 from printable import Printable
 from r2.lib.db.userrel import UserRel, MigratingUserRel
 from r2.lib.db.operators import lower, or_, and_, not_, desc
-from r2.lib.errors import UserRequiredException, RedditError
+from r2.lib.errors import RedditError
 from r2.lib.geoip import location_by_ips
 from r2.lib.memoize import memoize
 from r2.lib.permissions import ModeratorPermissionSet
@@ -59,6 +59,7 @@ from r2.lib.utils import (
     in_chunks,
     summarize_markdown,
     timeago,
+    to36,
     tup,
     unicode_title_to_ascii,
 )
@@ -135,6 +136,7 @@ class BaseSite(object):
         stylesheet=None,
         header=None,
         header_title='',
+        login_required=False,
     )
 
     def __getattr__(self, name):
@@ -747,6 +749,12 @@ class Subreddit(Thing, Printable, BaseSite):
                 and (c.user_is_admin
                      or self.is_moderator_with_perms(user, 'posts')))
 
+    def can_mute(self, muter, user):
+        return (user.is_mutable(self) and
+            (c.user_is_admin or
+                self.is_moderator_with_perms(muter, 'access', 'mail'))
+        )
+
     def can_distinguish(self,user):
         return (user
                 and (c.user_is_admin
@@ -792,14 +800,16 @@ class Subreddit(Thing, Printable, BaseSite):
         from r2.models import ModAction
         from r2.lib.media import upload_stylesheet
 
-        author = author if author else c.user._id36
+        if not author:
+            author = c.user
+
         if content is None:
             content = ''
         try:
             wiki = WikiPage.get(self, 'config/stylesheet')
         except tdb_cassandra.NotFound:
             wiki = WikiPage.create(self, 'config/stylesheet')
-        wr = wiki.revise(content, previous=prev, author=author, reason=reason, force=force)
+        wr = wiki.revise(content, previous=prev, author=author._id36, reason=reason, force=force)
 
         if parsed:
             self.stylesheet_url = upload_stylesheet(parsed)
@@ -811,7 +821,9 @@ class Subreddit(Thing, Printable, BaseSite):
             self.stylesheet_url_https = ""
         self._commit()
 
-        ModAction.create(self, c.user, action='wikirevise', details='Updated subreddit stylesheet')
+        if wr:
+            ModAction.create(self, author, action='wikirevise', details='Updated subreddit stylesheet')
+
         return wr
 
     def is_special(self, user):
@@ -1027,6 +1039,13 @@ class Subreddit(Thing, Printable, BaseSite):
     @classmethod
     @memoize('random_reddits', time = 1800)
     def random_reddits_cached(cls, user_name, sr_ids, limit):
+        # First filter out any subreddits that don't have a new enough post
+        # to be included in the front page (just doing this may remove enough
+        # to get below the limit anyway)
+        sr_ids = SubredditsActiveForFrontPage.filter_inactive_ids(sr_ids)
+        if len(sr_ids) <= limit:
+            return sr_ids
+
         return random.sample(sr_ids, limit)
 
     @classmethod
@@ -1536,14 +1555,15 @@ class FakeSubreddit(BaseSite):
 class FriendsSR(FakeSubreddit):
     name = 'friends'
     title = 'friends'
+    _defaults = dict(
+        FakeSubreddit._defaults,
+        login_required=True,
+    )
 
     def get_links(self, sort, time):
         from r2.lib.db import queries
 
-        if not c.user_is_loggedin:
-            raise UserRequiredException
-
-        friends = c.user.get_random_friends()
+        friends = c.user.get_recently_submitted_friend_ids()
         if not friends:
             return []
 
@@ -1563,10 +1583,7 @@ class FriendsSR(FakeSubreddit):
     def get_all_comments(self):
         from r2.lib.db import queries
 
-        if not c.user_is_loggedin:
-            raise UserRequiredException
-
-        friends = c.user.get_random_friends()
+        friends = c.user.get_recently_commented_friend_ids()
         if not friends:
             return []
 
@@ -1586,10 +1603,8 @@ class FriendsSR(FakeSubreddit):
 
     def get_gilded(self):
         from r2.lib.db.queries import get_gilded_users
-        if not c.user_is_loggedin:
-            raise UserRequiredException
 
-        friends = c.user.get_random_friends()
+        friends = c.user.friend_ids()
 
         if not friends:
             return []
@@ -2435,6 +2450,10 @@ class ModContribSR(MultiReddit):
     name  = None
     title = None
     query_param = None
+    _defaults = dict(
+        MultiReddit._defaults,
+        login_required=True,
+    )
 
     def __init__(self):
         # Can't lookup srs right now, c.user not set
@@ -2851,3 +2870,50 @@ def unmute_hook(data):
 
         subreddit.remove_muted(user)
         MutedAccountsBySubreddit.unmute(subreddit, user, automatic=True)
+
+
+class SubredditsActiveForFrontPage(tdb_cassandra.View):
+    """Tracks which subreddits currently have valid frontpage posts.
+    
+    The front page's "hot" page only includes posts that are newer than
+    g.HOT_PAGE_AGE, so there's no point including subreddits in it if they
+    haven't had a post inside that period. Since we pick random subsets of
+    users' subscriptions when they subscribe to more subreddits than we
+    build the page from, this means that inactive subreddits can effectively
+    "waste" some of these slots, since they may not have any posts that can
+    possibly be added to the page.
+
+    This CF will get an entry inserted for each subreddit whenever a new
+    post is made in that subreddit, with a TTL equal to g.HOT_PAGE_AGE. We
+    will then be able to query it to determine which subreddits don't have
+    any posts recent enough to contribute to the front page, and exclude
+    them from consideration for a user's front page set.
+    """
+
+    _use_db = True
+    _connection_pool = "main"
+    _ttl = datetime.timedelta(days=g.HOT_PAGE_AGE)
+    _extra_schema_creation_args = {
+        "key_validation_class": tdb_cassandra.ASCII_TYPE,
+    }
+    _read_consistency_level = tdb_cassandra.CL.ONE
+    _write_consistency_level = tdb_cassandra.CL.QUORUM
+
+    ROWKEY = "1"
+
+    @classmethod
+    def mark_new_post(cls, subreddit):
+        cls._set_values(cls.ROWKEY, {subreddit._id36: ""})
+
+    @classmethod
+    def filter_inactive_ids(cls, subreddit_ids):
+        sr_id36s = [to36(sr_id) for sr_id in subreddit_ids]
+        try:
+            results = cls._cf.get(cls.ROWKEY, columns=sr_id36s)
+        except tdb_cassandra.NotFoundException:
+            results = {}
+
+        num_filtered = len(subreddit_ids) - len(results)
+        g.stats.simple_event("frontpage.filter_inactive", delta=num_filtered)
+
+        return [int(sr_id36, 36) for sr_id36 in results.keys()]

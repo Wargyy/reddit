@@ -27,8 +27,12 @@ from mako.lookup import TemplateLookup
 from pylons.error import handle_mako_error
 from pylons.configuration import PylonsConfig
 
-import r2.config
 import r2.lib.helpers
+from r2.config.paths import (
+    get_r2_path,
+    get_built_statics_path,
+    get_raw_statics_path,
+)
 from r2.config.routing import make_map
 from r2.lib.app_globals import Globals
 from r2.lib.configparse import ConfigValue
@@ -38,18 +42,19 @@ mimetypes.init()
 
 
 def load_environment(global_conf={}, app_conf={}, setup_globals=True):
-    # Setup our paths
-    root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    r2_path = get_r2_path()
+    root_path = os.path.join(r2_path, 'r2')
 
-    paths = {'root': root_path,
-             'controllers': os.path.join(root_path, 'controllers'),
-             'templates': [os.path.join(root_path, 'templates')],
-             }
+    paths = {
+        'root': root_path,
+        'controllers': os.path.join(root_path, 'controllers'),
+        'templates': [os.path.join(root_path, 'templates')],
+    }
 
     if ConfigValue.bool(global_conf.get('uncompressedJS')):
-        paths['static_files'] = os.path.join(root_path, 'public')
+        paths['static_files'] = get_raw_statics_path()
     else:
-        paths['static_files'] = os.path.join(os.path.dirname(root_path), 'build/public')
+        paths['static_files'] = get_built_statics_path()
 
     config = PylonsConfig()
 
@@ -94,8 +99,7 @@ def load_environment(global_conf={}, app_conf={}, setup_globals=True):
             path = os.path.join(module_directory, filename + ".py")
             return os.path.abspath(path)
     else:
-        # we're probably in "paster run standalone" mode. we'll just avoid
-        # caching templates since we don't know where they should go.
+        # disable caching templates since we don't know where they should go.
         module_directory = mako_module_path = None
 
     # set up the templating system

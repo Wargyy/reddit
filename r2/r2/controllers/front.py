@@ -24,8 +24,6 @@ from pylons.i18n import _, ungettext
 from r2.controllers.reddit_base import (
     base_listing,
     disable_subreddit_css,
-    hsts_modify_redirect,
-    hsts_eligible,
     pagecache_policy,
     PAGECACHE_POLICY,
     paginated_listing,
@@ -289,6 +287,8 @@ class FrontController(RedditController):
 
         # check if we just came from the submit page
         infotext = None
+        infotext_class = None
+        infotext_show_icon = False
         if request.GET.get('already_submitted'):
             submit_url = request.GET.get('submit_url') or article.url
             submit_title = request.GET.get('submit_title') or ""
@@ -296,6 +296,14 @@ class FrontController(RedditController):
             if c.user_is_loggedin and c.site.can_submit(c.user):
                 resubmit_url = add_sr(resubmit_url)
             infotext = strings.already_submitted % resubmit_url
+        elif article.archived and feature.is_enabled('new_info_bar'):
+            infotext = strings.archived_post_message
+            infotext_class = 'archived-infobar'
+            infotext_show_icon = True
+        elif article.locked:
+            infotext = strings.locked_post_message
+            infotext_class = 'locked-infobar'
+            infotext_show_icon = True
 
         check_cheating('comments')
 
@@ -341,19 +349,21 @@ class FrontController(RedditController):
                                                    g.max_comments_gold))))
             num = g.max_comments
 
+        page_classes = ['comments-page']
+
         # if permalink page, add that message first to the content
         if comment:
             displayPane.append(PermalinkMessage(article.make_permalink_slow()))
+            page_classes.append('comment-permalink-page')
 
         displayPane.append(LinkCommentSep())
 
         # insert reply box only for logged in user
-        if c.user_is_loggedin and can_comment_link(article) and not is_api():
-            #no comment box for permalinks
-            display = False
-            if not comment and article._age < sr.archive_age:
-                display = True
+        if not is_api() and c.user_is_loggedin and article.can_comment(c.user):
+            # no comment box for permalinks
+            display = not comment
 
+            # show geotargeting notice only if user is able to comment
             if article.promoted:
                 geotargeted, city_target = promote.is_geotargeted_promo(article)
                 if geotargeted:
@@ -437,18 +447,38 @@ class FrontController(RedditController):
             suggested_sort=suggested_sort,
         )
 
+        # Check for click urls on promoted links
+        click_url = None
+        campaign_fullname = None
+        if article.promoted and not article.is_self:
+            campaign_fullname = request.GET.get("campaign", None)
+            click_url = request.GET.get("click_url", None)
+            click_hash = request.GET.get("click_hash", "")
 
-        res = LinkInfoPage(link=article,
-                           comment=comment,
-                           disable_comments=disable_comments,
-                           content=displayPane,
-                           page_classes=['comments-page'],
-                           subtitle=subtitle,
-                           subtitle_buttons=subtitle_buttons,
-                           nav_menus=[sort_menu, link_settings],
-                           infotext=infotext,
-                           sr_detail=sr_detail).render()
-        return res
+            if (click_url and not promote.is_valid_click_url(
+                    link=article,
+                    click_url=click_url,
+                    click_hash=click_hash)):
+                click_url = None
+
+        res = LinkInfoPage(
+            link=article,
+            comment=comment,
+            disable_comments=disable_comments,
+            content=displayPane,
+            page_classes=page_classes,
+            subtitle=subtitle,
+            subtitle_buttons=subtitle_buttons,
+            nav_menus=[sort_menu, link_settings],
+            infotext=infotext,
+            infotext_class=infotext_class,
+            infotext_show_icon=infotext_show_icon,
+            sr_detail=sr_detail,
+            campaign_fullname=campaign_fullname,
+            click_url=click_url,
+        )
+
+        return res.render()
 
     def _add_show_comments_link(self, array, article, num, max_comm, gold=False):
         if num == max_comm:
@@ -864,15 +894,16 @@ class FrontController(RedditController):
 
         """
         sticky_fullnames = c.site.get_sticky_fullnames()
-        if sticky_fullnames:
-            try:
-                fullname = sticky_fullnames[num-1]
-            except IndexError:
-                abort(404)
-            sticky = Link._by_fullname(fullname, data=True)
-            self.redirect(sticky.make_permalink_slow())
-        else:
+
+        if not num or not sticky_fullnames:
             abort(404)
+
+        try:
+            fullname = sticky_fullnames[num-1]
+        except IndexError:
+            abort(404)
+        sticky = Link._by_fullname(fullname, data=True)
+        self.redirect(sticky.make_permalink_slow())
 
     def GET_awards(self):
         """The awards page."""
@@ -1000,6 +1031,8 @@ class FrontController(RedditController):
     def GET_search(self, query, num, reverse, after, count, sort, recent,
                    restrict_sr, include_facets, result_types, syntax, sr_detail):
         """Search links page."""
+        if c.site.login_required and not c.user_is_loggedin:
+            raise UserRequiredException
 
         # trigger redirect to /over18
         if request.GET.get('over18') == 'yes':
@@ -1460,16 +1493,16 @@ class FrontController(RedditController):
     @validate(dest=VDestination(default='/'))
     def _modify_hsts_grant(self, dest):
         """Endpoint subdomains can redirect through to update HSTS grants."""
+        # TODO: remove this once it stops getting hit
         from r2.lib.base import abort
         require_https()
         if request.host != g.domain:
             abort(ForbiddenError(errors.WRONG_DOMAIN))
 
         # We can't send the user back to http: if they're forcing HTTPS
-        if c.user.https_forced:
-            dest_parsed = UrlParser(dest)
-            dest_parsed.scheme = "https"
-            dest = dest_parsed.unparse()
+        dest_parsed = UrlParser(dest)
+        dest_parsed.scheme = "https"
+        dest = dest_parsed.unparse()
 
         return self.redirect(dest, code=307)
 
@@ -1647,13 +1680,8 @@ class FormsController(RedditController):
               dest=VDestination())
     def POST_logout(self, dest):
         """wipe login cookie and redirect to referer."""
-
-        # Check eligibility before calling logout(), as logout() changes
-        # cookies that hsts_eligible() looks at
-        is_hsts_eligible = hsts_eligible()
         self.logout()
-        self.hsts_redirect(dest, is_hsts_eligible=is_hsts_eligible)
-
+        self.redirect(dest)
 
     @validate(VUser(),
               dest=VDestination())

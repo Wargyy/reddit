@@ -182,7 +182,6 @@ class Globals(object):
             'max_comment_parent_walk',
             'max_sr_images',
             'num_serendipity',
-            'sr_dropdown_threshold',
             'comment_visits_period',
             'butler_max_mentions',
             'min_membership_create_community',
@@ -375,6 +374,9 @@ class Globals(object):
         ConfigValue.dict(ConfigValue.str, ConfigValue.float): [
             'pennies_per_server_second',
         ],
+        ConfigValue.dict(ConfigValue.str, ConfigValue.str): [
+            'employee_approved_clients',
+        ],
         ConfigValue.dict(ConfigValue.str, ConfigValue.choice(**PERMISSIONS)): [
             'employees',
         ],
@@ -521,7 +523,7 @@ class Globals(object):
             self.read_only_mode = True
 
         origin_prefix = self.domain_prefix + "." if self.domain_prefix else ""
-        self.origin = "http://" + origin_prefix + self.domain
+        self.origin = self.default_scheme + "://" + origin_prefix + self.domain
 
         self.trusted_domains = set([self.domain])
         if self.https_endpoint:
@@ -646,6 +648,11 @@ class Globals(object):
             self.live_config, type="sponsor")
         self.employees = PermissionFilteredEmployeeList(
             self.live_config, type="employee")
+
+        # Store which OAuth clients employees may use, the keys are just for
+        # readability.
+        self.employee_approved_clients = \
+            self.live_config["employee_approved_clients"].values()
 
         self.startup_timer.intermediate("zookeeper")
 

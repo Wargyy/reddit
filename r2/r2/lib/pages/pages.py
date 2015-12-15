@@ -122,7 +122,12 @@ from r2.lib.menus import SubredditButton, SubredditMenu, ModeratorMailButton
 from r2.lib.menus import OffsiteButton, menu, JsNavMenu
 from r2.lib.normalized_hot import normalized_hot
 from r2.lib.providers import image_resizing
-from r2.lib.strings import plurals, rand_strings, strings, Score
+from r2.lib.strings import (
+    get_funny_translated_string,
+    plurals,
+    Score,
+    strings,
+)
 from r2.lib.utils import is_subdomain, title_to_url, query_string, UrlParser
 from r2.lib.utils import url_links_builder, median, to36
 from r2.lib.utils import trunc_time, timesince, timeuntil, weighted_lottery
@@ -246,8 +251,8 @@ class Reddit(Templated):
     extra_stylesheets  = []
 
     def __init__(self, space_compress=None, nav_menus=None, loginbox=True,
-                 infotext='', infotext_class=None, content=None,
-                 short_description='', title='',
+                 infotext='', infotext_class=None, infotext_show_icon=False,
+                 content=None, short_description='', title='',
                  robots=None, show_sidebar=True, show_chooser=False,
                  header=True, footer=True, srbar=True, page_classes=None,
                  short_title=None, show_wiki_actions=False, extra_js_config=None,
@@ -286,6 +291,7 @@ class Reddit(Templated):
             u = UrlParser(request.fullpath)
             u.set_extension("")
             u.hostname = g.domain
+            u.scheme = g.default_scheme
             if g.domain_prefix:
                 u.hostname = "%s.%s" % (g.domain_prefix, u.hostname)
             self.canonical_link = u.unparse()
@@ -306,16 +312,19 @@ class Reddit(Templated):
                     infotext = g.live_config["announcement_message"]
 
             if infotext:
-                self.infobar = InfoBar(
-                    message=infotext, extra_class=infotext_class)
+                self.infobar = RedditInfoBar(
+                    message=infotext,
+                    extra_class=infotext_class,
+                    show_icon=infotext_show_icon,
+                )
             elif (isinstance(c.site, DomainSR) and
                     is_subdomain(c.site.domain, "imgur.com")):
-                self.infobar = InfoBar(message=
+                self.infobar = RedditInfoBar(message=
                     _("imgur.com domain listings (including this one) are "
                       "currently disabled to speed up vote processing.")
                 )
             elif isinstance(c.site, AllMinus) and not c.user.gold:
-                self.infobar = InfoBar(message=strings.all_minus_gold_only,
+                self.infobar = RedditInfoBar(message=strings.all_minus_gold_only,
                                        extra_class="gold")
 
             if not c.user_is_loggedin:
@@ -324,7 +333,8 @@ class Reddit(Templated):
                 if getattr(self, "show_newsletterbar", True):
                     self.newsletterbar = NewsletterBar()
 
-            if c.render_style == "compact":
+            if (c.render_style == "compact" and 
+                    getattr(self, "show_mobilewebredirectbar", True)):
                 self.mobilewebredirectbar = MobileWebRedirectBar()
 
             show_locationbar &= not c.user.pref_hide_locationbar
@@ -496,9 +506,7 @@ class Reddit(Templated):
         if is_single_subreddit:
             if is_moderator_with_perms('access'):
                 buttons.append(NamedButton("banned", css_class="reddit-ban"))
-
-            if (is_moderator_with_perms('access', 'mail') and
-                    feature.is_enabled("modmail_muting")):
+            if is_moderator_with_perms('access', 'mail'):
                 buttons.append(NamedButton("muted", css_class="reddit-mute"))
             if is_moderator_with_perms('flair'):
                 buttons.append(NamedButton("flair", css_class="reddit-flair"))
@@ -696,9 +704,10 @@ class Reddit(Templated):
         if self.create_reddit_box and c.user_is_loggedin:
             delta = datetime.datetime.now(g.tz) - c.user._date
             if delta.days >= g.min_membership_create_community:
+                subtitles = get_funny_translated_string("create_subreddit", 2)
                 ps.append(SideBox(_('Create your own subreddit'),
                            '/subreddits/create', 'create',
-                           subtitles = rand_strings.get("create_reddit", 2),
+                           subtitles=subtitles,
                            show_cover = True, nocname=True))
 
         if c.default_sr:
@@ -1054,8 +1063,10 @@ class SubredditInfoBar(CachedTemplate):
 
         self.quarantine = self.sr.quarantine
 
+        has_custom_stylesheet = (self.sr.stylesheet_url or
+            self.sr.stylesheet_url_https or self.sr.stylesheet_url_http)
         if (c.user_is_loggedin and
-                (self.sr.stylesheet_url or self.sr.header) and
+                (has_custom_stylesheet or self.sr.header) and
                 feature.is_enabled('stylesheets_everywhere')):
             # defaults to c.user.pref_show_stylesheets if a match doesn't exist
             self.sr_style_toggle = True
@@ -1383,6 +1394,8 @@ class RegistrationInfo(Templated):
 
 
 class OAuth2AuthorizationPage(BoringPage):
+    show_mobilewebredirectbar = False
+
     def __init__(self, client, redirect_uri, scope, state, duration,
                  response_type):
         if duration == "permanent":
@@ -1497,7 +1510,9 @@ class LinkInfoPage(Reddit):
 
     def __init__(self, link = None, comment = None, disable_comments=False,
                  link_title = '', subtitle = None, num_duplicates = None,
-                 show_promote_button=False, sr_detail=False, *a, **kw):
+                 show_promote_button=False, sr_detail=False,
+                 campaign_fullname=promote.NO_CAMPAIGN, click_url=None,
+                 *a, **kw):
 
         c.permalink_page = True
         expand_children = kw.get("expand_children", not bool(comment))
@@ -1507,17 +1522,22 @@ class LinkInfoPage(Reddit):
 
         # link_listing will be the one-element listing at the top
         self.link_listing = wrap_links(link, wrapper=wrapper, sr_detail=sr_detail)
+        things = self.link_listing.things
+        self.link = things[0]
 
         # add click tracker
-        things = self.link_listing.things
+        self.link.campaign = campaign_fullname
 
-        # links aren't associated with any campaign at this point
-        for link in things:
-            link.campaign = ''
+        # don't need to track clicks on self posts since they've
+        # already been clicked at this point
+        if not self.link.is_self:
+            promote.add_trackers(
+                things,
+                c.site,
+                adserver_click_urls={campaign_fullname: click_url},
+            )
 
-        promote.add_trackers(things, c.site)
         self.disable_comments = disable_comments
-        self.link = things[0]
 
         if promote.is_promo(self.link) and not promote.is_promoted(self.link):
             self.link.votable = False
@@ -1723,9 +1743,12 @@ class LinkInfoPage(Reddit):
         if self.disable_comments:
             comment_area = InfoBar(message=_("comments disabled"))
         else:
+            panes = [self.nav_menu, self._content]
+            if self.link.locked:
+                panes.append(Popup('locked-popup', LockedInterstitial()))
             comment_area = PaneStack([
                 PaneStack(
-                    (self.nav_menu, self._content)
+                    panes
                 )],
                 title=self.subtitle,
                 title_buttons=getattr(self, "subtitle_buttons", []),
@@ -1859,14 +1882,13 @@ class CommentPane(Templated):
             try_cache &= user_threshold == default_threshold
 
         if c.user_is_loggedin:
-            sr = article.subreddit_slow
-            self.can_reply = sr.can_comment(c.user)
+            self.can_reply = article.can_comment(c.user)
         else:
             # assume that the common case is for loggedin users to see reply
             # buttons and do the same for loggedout users so they can use the
             # same cached page. reply buttons will be hidden client side for
             # loggedout users
-            self.can_reply = article._age < article.subreddit_slow.archive_age
+            self.can_reply = not article.archived and not article.locked
 
         builder = CommentBuilder(
             article, sort, comment=comment, context=context, num=num, **kw)
@@ -1936,11 +1958,7 @@ class CommentPane(Templated):
 
             # figure out what needs to be updated on the listing
             if c.user_is_loggedin:
-                likes = []
-                dislikes = []
-                is_friend = set()
-                gildings = {}
-                saves = set()
+                updates = []
 
                 # wrap the comments so the builder will customize them for
                 # the loggedin user
@@ -1951,21 +1969,34 @@ class CommentPane(Templated):
                     if not hasattr(t, "likes"):
                         # this is for MoreComments and MoreRecursion
                         continue
-                    if getattr(t, "friend", False) and not t.author._deleted:
-                        is_friend.add(t.author._fullname)
-                    if t.likes:
-                        likes.append(t._fullname)
-                    if t.likes is False:
-                        dislikes.append(t._fullname)
-                    if t.user_gilded:
-                        gildings[t._fullname] = (t.gilded_message, t.gildings)
-                    if t.saved:
-                        saves.add(t._fullname)
-                self.rendered += ThingUpdater(likes = likes,
-                                              dislikes = dislikes,
-                                              is_friend = is_friend,
-                                              gildings = gildings,
-                                              saves = saves).render()
+
+                    is_friend = getattr(t, "friend", False) and not t.author._deleted
+                    liked = t.likes
+                    disliked = t.likes is False
+                    saved = t.saved
+                    gilded = t.user_gilded
+
+                    if not (is_friend or liked or disliked or saved or gilded):
+                        continue
+
+                    update = {
+                        'id': t._fullname,
+                    }
+
+                    if is_friend:
+                        update['friend'] = True
+                    if liked:
+                        update['voted'] = 1
+                    if disliked:
+                        update['voted'] = -1
+                    if saved:
+                        update['saved'] = True
+                    if gilded:
+                        update['gilded'] = (t.gilded_message, t.gildings)
+
+                    updates.append(update)
+
+                self.rendered += ThingUpdater(updates=updates).render()
                 timer.intermediate("thingupdater")
 
         if try_cache:
@@ -2126,12 +2157,11 @@ class ProfilePage(Reddit):
             main_buttons += [
                 NamedButton('upvoted'),
                 NamedButton('downvoted'),
-                NamedButton('hidden'),
             ]
 
         if c.user_is_loggedin and (c.user._id == self.user._id or
                                    c.user_is_admin):
-            main_buttons += [NamedButton('saved')]
+            main_buttons += [NamedButton('hidden'), NamedButton('saved')]
 
         if c.user_is_sponsor:
             main_buttons += [NamedButton('promoted')]
@@ -2382,10 +2412,23 @@ class MenuArea(Templated):
     def __init__(self, menus = []):
         Templated.__init__(self, menus = menus)
 
+
 class InfoBar(Templated):
     """Draws the yellow box at the top of a page for info"""
-    def __init__(self, message = '', extra_class = ''):
-        Templated.__init__(self, message = message, extra_class = extra_class)
+    def __init__(self, message='', extra_class=''):
+        Templated.__init__(self, message=message, extra_class=extra_class)
+
+
+class RedditInfoBar(InfoBar):
+    def __init__(self, message='', extra_class='', show_icon=False):
+        if not feature.is_enabled('new_info_bar'):
+            self.render_class = InfoBar
+        self.show_icon = show_icon
+        super(RedditInfoBar, self).__init__(
+            message=message,
+            extra_class=extra_class,
+        )
+
 
 class WelcomeBar(InfoBar):
     def __init__(self):
@@ -2525,6 +2568,22 @@ class Over18Interstitial(Interstitial):
     pass
 
 
+class LockedInterstitial(Interstitial):
+    """The error message shown when attempting to comment on a locked post."""
+    pass
+
+
+class Popup(Templated):
+    """Generic template for rendering a modal."""
+    def __init__(self, popup_id=None, content=None, **kwargs):
+        Templated.__init__(
+            self,
+            popup_id=popup_id,
+            content=content,
+            **kwargs
+        )
+
+
 class SubredditTopBar(CachedTemplate):
 
     """The horizontal strip at the top of most pages for navigating
@@ -2543,7 +2602,7 @@ class SubredditTopBar(CachedTemplate):
         # template being added to the header. set c.location as an attribute so
         # it is added to the render cache key.
         self.location = c.location or "no_location"
-
+        self.my_subreddits_dropdown = self.my_reddits_dropdown()
         CachedTemplate.__init__(self, name=name, t=t, over18=c.over18)
 
     @property
@@ -2557,10 +2616,6 @@ class SubredditTopBar(CachedTemplate):
         if self._pop_reddits is None:
             self._pop_reddits = Subreddit.default_subreddits(ids=False)
         return self._pop_reddits
-
-    @property
-    def show_my_reddits_dropdown(self):
-        return len(self.my_reddits) > g.sr_dropdown_threshold
 
     def my_reddits_dropdown(self):
         drop_down_buttons = []
@@ -4228,7 +4283,7 @@ class PromoteLinkEdit(PromoteLinkBase):
             'help_center': 'https://reddit.zendesk.com/hc/en-us/categories/200352595-Advertising',
             'selfserve': 'https://www.reddit.com/r/selfserve'
         }
-        self.infobar = InfoBar(message=message)
+        self.infobar = RedditInfoBar(message=message)
         self.price_dict = PromotionPrices.get_price_dict(self.author)
 
 

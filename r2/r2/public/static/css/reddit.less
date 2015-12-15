@@ -504,8 +504,8 @@ ul.flat-vert {text-align: left;}
  }
 
 .side .side-message {
-    background: lighten(@info-bg, 10%) no-repeat 10px 10px;
-    border: 1px solid darken(@info-bg, 20%);
+    background: lighten(@infobar-legacy-color, 10%) no-repeat 10px 10px;
+    border: 1px solid darken(@infobar-legacy-color, 20%);
     border-radius: 2px;
     padding: 10px;
     line-height: 1.75em;
@@ -1782,25 +1782,6 @@ body.with-listing-chooser.explore-page #header .pagename {
     overflow: auto;
 }
 
-@info-bg: #f6e69f;
-@info-border: orange;
-.infobar {
-    background-color: @info-bg;
-    padding: 5px 10px;
-    margin: 5px 305px 5px 0px;
-    border: 1px solid @info-border;
-    font-size: small;
-}
-
-.infobar img {
-    display: inline;
-    vertical-align: middle;
-}
-
-.infobar strong {
-    font-weight: bold;
-}
-
 .infobar.red { 
     padding: 5px;
     background-color: #FFAEAE;
@@ -2156,6 +2137,17 @@ a.star { text-decoration: none; color: #ff8b60 }
   }
 }
 
+.quarantine-tool.noncollapsed {
+    .quarantine-info {
+        display: block;
+    }
+}
+
+.quarantine-tool.collapsed {
+    .quarantine-info {
+        display: none;
+    }
+}
 
 /* comments */
 
@@ -8685,8 +8677,14 @@ form#banned textarea {
 .modactions.removewikicontributor,
 .modactions.ignorereports,
 .modactions.unignorereports,
+.modactions.setpermissions,
+.modactions.setsuggestedsort,
 .modactions.sticky,
-.modactions.unsticky {
+.modactions.unsticky,
+.modactions.setcontestmode,
+.modactions.unsetcontestmode,
+.modactions.lock,
+.modactions.unlock {
     height: 16px;
     width: 16px;
     display: block;
@@ -8770,11 +8768,29 @@ form#banned textarea {
 .modactions.unignorereports {
     background-image: url(../modactions_unmute.png); /* SPRITE */
 }
+.modactions.setpermissions {
+    background-image: url(../modactions_setpermissions.png); /* SPRITE */
+}
+.modactions.setsuggestedsort {
+    background-image: url(../modactions_setsuggestedsort.png); /* SPRITE */
+}
 .modactions.sticky {
     background-image: url(../modactions_sticky.png); /* SPRITE */
 }
 .modactions.unsticky {
     background-image: url(../modactions_unsticky.png); /* SPRITE */
+}
+.modactions.setcontestmode {
+    background-image: url(../modactions_setcontestmode.png); /* SPRITE */
+}
+.modactions.unsetcontestmode {
+    background-image: url(../modactions_unsetcontestmode.png); /* SPRITE */
+}
+.modactions.lock {
+    background-image: url(../modactions_lock.png); /* SPRITE */
+}
+.modactions.unlock {
+    background-image: url(../modactions_unlock.png); /* SPRITE */
 }
 
 .adminpasswordform {

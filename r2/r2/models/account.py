@@ -259,19 +259,22 @@ class Account(Thing):
     def update_last_visit(self, current_time):
         from admintools import apply_updates
 
-        apply_updates(self)
+        timer = g.stats.get_timer("account.update_last_visit")
+        timer.start()
+
+        apply_updates(self, timer)
 
         prev_visit = LastModified.get(self._fullname, "Visit")
+        timer.intermediate("get_last_modified")
+
         if prev_visit and current_time - prev_visit < timedelta(days=1):
+            timer.intermediate("set_last_modified.noop")
+            timer.stop()
             return
 
-        g.log.debug ("Updating last visit for %s from %s to %s" %
-                    (self.name, prev_visit, current_time))
-
         LastModified.touch(self._fullname, "Visit")
-
-        self.last_visit = int(time.time())
-        self._commit()
+        timer.intermediate("set_last_modified.done")
+        timer.stop()
 
     def make_cookie(self, timestr=None):
         if not self._loaded:
@@ -407,6 +410,15 @@ class Account(Thing):
         #   - None: (the default) the user is not a mod anywhere
         return self.modmsgtime is not None
 
+    def is_mutable(self, subreddit):
+        # Don't allow muting of other mods in the subreddit
+        if subreddit.is_moderator(self):
+            return False
+
+        # Don't allow muting of u/reddit or u/AutoModerator
+        return not (self == self.system_user() or
+            self == self.automoderator_user())
+
     # Used on the goldmember version of /prefs/friends
     @memoize('account.friend_rels')
     def friend_rels_cache(self):
@@ -449,13 +461,24 @@ class Account(Thing):
         rel.note = note
         rel._commit()
 
-    @memoize("get_random_friends", time=30*60)
-    def get_random_friends(self, limit=100):
-        friends = self.friend_ids()
-        if len(friends) > limit:
-            friends = random.sample(friends, limit)
+    def _get_friend_ids_by(self, data_value_name, limit):
+        friend_ids = self.friend_ids()
+        if len(friend_ids) <= limit:
+            return friend_ids
+        
+        with g.stats.get_timer("friends_query.%s" % data_value_name):
+            result = self.sort_ids_by_data_value(
+                friend_ids, data_value_name, limit=limit, desc=True)
 
-        return friends
+        return result.fetchall()
+
+    @memoize("get_recently_submitted_friend_ids", time=10*60)
+    def get_recently_submitted_friend_ids(self, limit=100):
+        return self._get_friend_ids_by("last_submit_time", limit)
+
+    @memoize("get_recently_commented_friend_ids", time=10*60)
+    def get_recently_commented_friend_ids(self, limit=100):
+        return self._get_friend_ids_by("last_comment_time", limit)
 
     def delete(self, delete_message=None):
         self.delete_message = delete_message
@@ -559,6 +582,13 @@ class Account(Thing):
         except (NotFound, AttributeError):
             return None
 
+    @classmethod
+    def automoderator_user(cls):
+        try:
+            return cls._by_name(g.automoderator_account)
+        except (NotFound, AttributeError):
+            return None
+
     def use_subreddit_style(self, sr):
         """Return whether to show subreddit stylesheet depending on
         individual selection if available, else use pref_show_stylesheets"""
@@ -646,13 +676,6 @@ class Account(Thing):
                 (self.name in g.admins or
                  self.name in g.sponsors or
                  self.name in g.employees))
-
-    @property
-    def https_forced(self):
-        """Return whether this account may only be used via HTTPS."""
-        if feature.is_enabled("require_https", user=self):
-            return True
-        return self.pref_force_https
 
     @property
     def has_gold_subscription(self):

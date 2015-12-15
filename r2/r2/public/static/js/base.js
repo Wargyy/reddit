@@ -113,6 +113,7 @@ $(function() {
 
         r.login.ui.init()
         r.analytics.init()
+        r.TimeText.init();
         r.ui.init()
         r.interestbar.init()
         r.visited.init()
@@ -126,7 +127,8 @@ $(function() {
         r.filter.init()
         r.newsletter.ui.init()
         r.cachePoisoning.init()
+        r.locked.init();
     } catch (err) {
-        r.sendError('Error during base.js init', err)
+        r.sendError('Error during base.js init', err.toString());
     }
 })

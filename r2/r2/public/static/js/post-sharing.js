@@ -296,6 +296,7 @@
       var title = this.thingData.title;
       var shareParams = {
         canonicalUrl: redditUrl,
+        posttype: 'link',
         title: title,
       };
       var shareUrl = replaceParams('https://www.tumblr.com/widgets/share/tool', shareParams);
@@ -461,11 +462,14 @@
           name: 'twitter',
           tooltip: r._('Share to %(name)s').format({name: 'Twitter'}),
         },
-        {
+      ];
+
+      if (r.config.feature_tumblr_sharing) {
+        shareOptions.push({
           name: 'tumblr',
           tooltip: r._('Share to %(name)s').format({name: 'Tumblr'}),
-        },
-      ];
+        });
+      }
 
       if (r.config.logged) {
         shareOptions.push({
@@ -491,7 +495,9 @@
       });
 
       postSharing.on('unmount', function() {
-        r.ui.activeShareMenu = null;
+        if (r.ui.activeShareMenu === postSharing) {
+          r.ui.activeShareMenu = null;
+        }
       });
 
       postSharing.on('close', function() {

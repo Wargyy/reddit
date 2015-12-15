@@ -24,6 +24,7 @@ import hmac
 import hashlib
 import urllib
 
+from r2.config import feature
 from r2.models import *
 from filters import (
     _force_utf8,
@@ -197,7 +198,7 @@ def js_config(extra_config=None):
         "extension": c.extension,
         "https_endpoint": is_subdomain(request.host, g.domain) and g.https_endpoint,
         # does the client only want to communicate over HTTPS?
-        "https_forced": c.user.https_forced,
+        "https_forced": feature.is_enabled("force_https"),
         # debugging?
         "debug": g.debug,
         "poisoning_canary": poisoning_canary,
@@ -230,6 +231,7 @@ def js_config(extra_config=None):
           "actionName": route_name,
         },
         "facebook_app_id": g.live_config["facebook_app_id"],
+        "feature_tumblr_sharing": feature.is_enabled('tumblr_sharing'),
     }
 
     if g.tracker_url:
@@ -411,19 +413,16 @@ def get_domain(cname = False, subreddit = True, no_www = False):
     return domain
 
 def dockletStr(context, type, browser):
-    domain      = get_domain()
-
-    # while site_domain will hold the (possibly) cnamed version
-    site_domain = get_domain(True)
+    site_host = "%s://%s" % (g.default_scheme, get_domain())
 
     if type == "serendipity!":
-        return "http://"+site_domain+"/random"
+        return site_host+"/random"
     elif type == "submit":
-        return ("javascript:location.href='http://"+site_domain+
+        return ("javascript:location.href='"+site_host+
                "/submit?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)")
     elif type == "reddit toolbar":
-        return ("javascript:%20var%20h%20=%20window.location.href;%20h%20=%20'http://" +
-                site_domain + "/s/'%20+%20escape(h);%20window.location%20=%20h;")
+        return ("javascript:%20var%20h%20=%20window.location.href;%20h%20=%20'" +
+                site_host + "/s/'%20+%20escape(h);%20window.location%20=%20h;")
     else:
         # these are the linked/disliked buttons, which we have removed
         # from the UI
@@ -431,13 +430,13 @@ def dockletStr(context, type, browser):
                  "var i=document.getElementById('redstat')||document.createElement('a');"
                  "var s=i.style;s.position='%(position)s';s.top='0';s.left='0';"
                  "s.zIndex='10002';i.id='redstat';"
-                 "i.href='http://%(site_domain)s/submit?url='+u+'&title='+"
+                 "i.href='%(site_host)s/submit?url='+u+'&title='+"
                  "encodeURIComponent(document.title);"
                  "var q=i.firstChild||document.createElement('img');"
-                 "q.src='http://%(domain)s/d/%(type)s.png?v='+Math.random()+'&uh=%(modhash)s&u='+u;"
+                 "q.src='%(site_host)s/d/%(type)s.png?v='+Math.random()+'&uh=%(modhash)s&u='+u;"
                  "i.appendChild(q);document.body.appendChild(i)};b()") %
                 dict(position = "absolute" if browser == "ie" else "fixed",
-                     domain = domain, site_domain = site_domain, type = type,
+                     site_host = site_host, type = type,
                      modhash = c.modhash if c.user else ''))
 
 

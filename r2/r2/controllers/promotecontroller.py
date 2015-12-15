@@ -35,9 +35,19 @@ from pylons.i18n import _, N_
 from r2.controllers.api import ApiController
 from r2.controllers.listingcontroller import ListingController
 from r2.controllers.reddit_base import RedditController
-
-from r2.lib import hooks, inventory, promote
-from r2.lib.authorize import get_account_info, edit_profile, PROFILE_LIMIT
+from r2.lib import (
+    hooks,
+    inventory,
+    media,
+    promote,
+    s3_helpers,
+)
+from r2.lib.authorize import (
+    get_or_create_customer_profile,
+    add_or_update_payment_method,
+    PROFILE_LIMIT,
+)
+from r2.lib.authorize.api import AuthorizeNetException
 from r2.lib.base import abort
 from r2.lib.db import queries
 from r2.lib.errors import errors
@@ -212,7 +222,7 @@ class PromoteController(RedditController):
             return self.abort404()
 
         if g.authorizenetapi:
-            data = get_account_info(c.user)
+            data = get_or_create_customer_profile(c.user)
             content = PaymentForm(link, campaign,
                                   customer_id=data.customerProfileId,
                                   profiles=data.paymentProfiles,
@@ -1255,6 +1265,12 @@ class PromoteApiController(ApiController):
     )
     def POST_update_pay(self, form, jquery, link, campaign, customer_id, pay_id,
                         edit, address, creditcard):
+
+        def _handle_failed_payment(reason=None):
+            promote.failed_payment_method(c.user, link)
+            msg = reason or _("failed to authenticate card. sorry.")
+            form.set_text(".status", msg)
+
         if not g.authorizenetapi:
             return
 
@@ -1296,10 +1312,19 @@ class PromoteApiController(ApiController):
                     form.has_errors(card_fields, errors.BAD_CARD)):
                 return
 
-            pay_id = edit_profile(c.user, address, creditcard, pay_id)
+            try:
+                pay_id = add_or_update_payment_method(
+                    c.user, address, creditcard, pay_id)
 
-            if pay_id:
-                promote.new_payment_method(user=c.user, ip=request.ip, address=address, link=link)
+                if pay_id:
+                    promote.new_payment_method(user=c.user,
+                                               ip=request.ip,
+                                               address=address,
+                                               link=link)
+
+            except AuthorizeNetException:
+                _handle_failed_payment()
+                return
 
         if pay_id:
             success, reason = promote.auth_campaign(link, campaign, c.user,
@@ -1308,7 +1333,7 @@ class PromoteApiController(ApiController):
             if success:
                 hooks.get_hook("promote.campaign_paid").call(link=link, campaign=campaign)
                 if not address and g.authorizenetapi:
-                    profiles = get_account_info(c.user).paymentProfiles
+                    profiles = get_or_create_customer_profile(c.user).paymentProfiles
                     profile = {p.customerPaymentProfileId: p for p in profiles}[pay_id]
 
                     address = profile.billTo
@@ -1318,12 +1343,10 @@ class PromoteApiController(ApiController):
                 jquery.payment_redirect(promote.promo_edit_url(link), new_payment, campaign.bid)
                 return
             else:
-                promote.failed_payment_method(c.user, link)
-                msg = reason or _("failed to authenticate card. sorry.")
-                form.set_text(".status", msg)
+                _handle_failed_payment(reason)
+
         else:
-            promote.failed_payment_method(c.user, link)
-            form.set_text(".status", _("failed to authenticate card. sorry."))
+            _handle_failed_payment()
 
     @validate(
         VSponsor("link_name"),

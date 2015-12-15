@@ -306,6 +306,7 @@ class SubredditJsonTemplate(ThingJsonTemplate):
         submit_text_html="submit_text_html",
         subreddit_type="type",
         subscribers="_ups",
+        suggested_comment_sort="suggested_comment_sort",
         title="title",
         url="path",
         user_is_banned="is_banned",
@@ -621,6 +622,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
         likes="likes",
         link_flair_css_class="flair_css_class",
         link_flair_text="flair_text",
+        locked="locked",
         media="media_object",
         media_embed="media_embed",
         num_comments="num_comments",
@@ -685,7 +687,7 @@ class LinkJsonTemplate(ThingJsonTemplate):
             if not thing.expunged:
                 return thing.selftext
             else:
-                return ''
+                return '[removed]'
         elif attr == 'selftext_html':
             if not thing.expunged:
                 return safemarkdown(thing.selftext)
@@ -1381,6 +1383,7 @@ class SubredditSettingsTemplate(ThingJsonTemplate):
         submit_text='site.submit_text',
         subreddit_id='site._fullname',
         subreddit_type='site.type',
+        suggested_comment_sort="site.suggested_comment_sort",
         title='site.title',
         wiki_edit_age='site.wiki_edit_age',
         wiki_edit_karma='site.wiki_edit_karma',

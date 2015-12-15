@@ -40,7 +40,7 @@ from r2.lib.db import tdb_cassandra
 from r2.lib.db.operators import asc, desc
 from r2.lib.souptest import (
     SoupError,
-    SoupHostnameLengthError,
+    SoupDetectedCrasherError,
     SoupUnsupportedEntityError,
 )
 from r2.lib.template_helpers import add_sr
@@ -63,27 +63,11 @@ import re, inspect
 from itertools import chain
 from functools import wraps
 
-def visible_promo(article):
-    is_promo = getattr(article, "promoted", None) is not None
-    is_author = (c.user_is_loggedin and
-                 c.user._id == article.author_id)
-
-    # promos are visible only if the user is either the author
-    # or the link is live/previously live.
-    if is_promo:
-        return (c.user_is_sponsor or
-                is_author or
-                article.promote_status >= PROMOTE_STATUS.promoted)
-    # not a promo, therefore it is visible
-    return True
 
 def can_view_link_comments(article):
     return (article.subreddit_slow.can_view(c.user) and
-            visible_promo(article))
+            article.can_view_promo(c.user))
 
-def can_comment_link(article):
-    return (article.subreddit_slow.can_comment(c.user) and
-            visible_promo(article))
 
 class Validator(object):
     notes = None
@@ -648,7 +632,7 @@ class VMarkdown(Validator):
                 user = c.user.name
 
             # work around CRBUG-464270
-            if isinstance(e, SoupHostnameLengthError):
+            if isinstance(e, SoupDetectedCrasherError):
                 # We want a general idea of how often this is triggered, and
                 # by what
                 g.log.warning("CHROME HAX by %s: %s" % (user, text))
@@ -1215,38 +1199,67 @@ class VSrSpecial(VByName):
 
 class VSubmitParent(VByName):
     def run(self, fullname, fullname2):
-        #for backwards compatability (with iphone app)
+        # for backwards compatibility (with iphone app)
         fullname = fullname or fullname2
-        if fullname:
-            parent = VByName.run(self, fullname)
-            if not isinstance(parent, (Comment, Link, Message)):
-                abort(403, "forbidden")
+        parent = VByName.run(self, fullname) if fullname else None
 
-            if parent:
-                if c.user_is_loggedin and parent.author_id in c.user.enemies:
-                    self.set_error(errors.USER_BLOCKED)
-                if parent._deleted:
-                    if isinstance(parent, Link):
-                        self.set_error(errors.DELETED_LINK)
-                    else:
-                        self.set_error(errors.DELETED_COMMENT)
-                if parent._spam and isinstance(parent, Comment):
-                    # Only author, mod or admin can reply to removed comments
-                    can_reply = (c.user_is_loggedin and
-                                 (parent.author_id == c.user._id or
-                                  c.user_is_admin or
-                                  parent.subreddit_slow.is_moderator(c.user)))
-                    if not can_reply:
-                        self.set_error(errors.DELETED_COMMENT)
-            if isinstance(parent, Message):
+        if not parent:
+            # for backwards compatibility (normally 404)
+            abort(403, "forbidden")
+
+        if not isinstance(parent, (Comment, Link, Message)):
+            # for backwards compatibility (normally 400)
+            abort(403, "forbidden")
+
+        if not c.user_is_loggedin:
+            # in practice this is handled by VUser
+            abort(403, "forbidden")
+
+        if parent.author_id in c.user.enemies:
+            self.set_error(errors.USER_BLOCKED)
+
+        if isinstance(parent, Message):
+            return parent
+
+        elif isinstance(parent, Link):
+            sr = parent.subreddit_slow
+
+            if parent._deleted:
+                self.set_error(errors.DELETED_LINK)
+
+            if parent.archived:
+                self.set_error(errors.TOO_OLD)
+            elif parent.locked and not sr.can_distinguish(c.user):
+                self.set_error(errors.THREAD_LOCKED)
+
+            if self.has_errors or parent.can_comment(c.user):
                 return parent
-            else:
-                link = parent
-                if isinstance(parent, Comment):
-                    link = Link._byID(parent.link_id, data=True)
-                if link and c.user_is_loggedin and can_comment_link(link):
-                    return parent
-        #else
+
+        elif isinstance(parent, Comment):
+            sr = parent.subreddit_slow
+
+            if parent._deleted:
+                self.set_error(errors.DELETED_COMMENT)
+
+            elif parent._spam:
+                # Only author, mod or admin can reply to removed comments
+                can_reply = (c.user_is_loggedin and
+                             (parent.author_id == c.user._id or
+                              c.user_is_admin or
+                              sr.is_moderator(c.user)))
+                if not can_reply:
+                    self.set_error(errors.DELETED_COMMENT)
+
+            link = Link._byID(parent.link_id, data=True)
+
+            if link.archived:
+                self.set_error(errors.TOO_OLD)
+            elif link.locked and not sr.can_distinguish(c.user):
+                self.set_error(errors.THREAD_LOCKED)
+
+            if self.has_errors or link.can_comment(c.user):
+                return parent
+
         abort(403, "forbidden")
 
     def param_docs(self):

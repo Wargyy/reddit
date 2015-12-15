@@ -50,7 +50,11 @@ from r2.lib.filters import _force_utf8
 from r2.lib.geoip import location_by_ips
 from r2.lib.memoize import memoize
 from r2.lib.strings import strings
-from r2.lib.utils import to_date, weighted_lottery
+from r2.lib.utils import (
+    constant_time_compare,
+    to_date,
+    weighted_lottery,
+)
 from r2.models import (
     Account,
     Bid,
@@ -60,6 +64,7 @@ from r2.models import (
     Frontpage,
     Link,
     MultiReddit,
+    NotFound,
     NO_TRANSACTION,
     PromoCampaign,
     PROMOTE_STATUS,
@@ -106,26 +111,28 @@ def promo_keep_fn(item):
 
 # attrs
 
-def _base_domain():
+def _base_host():
     if g.domain_prefix:
-        return g.domain_prefix + '.' + g.domain
+        base_domain = g.domain_prefix + '.' + g.domain
     else:
-        return g.domain
+        base_domain = g.domain
+    return "%s://%s" % (g.default_scheme, base_domain)
+
 
 def promo_traffic_url(l): # old traffic url
-    return "http://%s/traffic/%s/" % (_base_domain(), l._id36)
+    return "%s/traffic/%s/" % (_base_host(), l._id36)
 
 def promotraffic_url(l): # new traffic url
-    return "http://%s/promoted/traffic/headline/%s" % (_base_domain(), l._id36)
+    return "%s/promoted/traffic/headline/%s" % (_base_host(), l._id36)
 
 def promo_edit_url(l):
-    return "http://%s/promoted/edit_promo/%s" % (_base_domain(), l._id36)
+    return "%s/promoted/edit_promo/%s" % (_base_host(), l._id36)
 
 def view_live_url(l, srname):
-    domain = _base_domain()
+    host = _base_host()
     if srname:
-        domain += '/r/%s' % srname
-    return 'http://%s/?ad=%s' % (domain, l._fullname)
+        host += '/r/%s' % srname
+    return '%s/?ad=%s' % (host, l._fullname)
 
 def payment_url(action, link_id36, campaign_id36):
     path = '/promoted/%s/%s/%s' % (action, link_id36, campaign_id36)
@@ -177,7 +184,7 @@ def update_query(base_url, query_updates):
     scheme, netloc, path, params, query, fragment = urlparse.urlparse(base_url)
     query_dict = urlparse.parse_qs(query)
     query_dict.update(query_updates)
-    query = urllib.urlencode(query_dict)
+    query = urllib.urlencode(query_dict, doseq=True)
     return urlparse.urlunparse((scheme, netloc, path, params, query, fragment))
 
 
@@ -193,12 +200,30 @@ def update_served(items):
             campaign._commit()
 
 
+NO_CAMPAIGN = "NO_CAMPAIGN"
+
+def is_valid_click_url(link, click_url, click_hash):
+    expected_mac = get_click_url_hmac(link, click_url)
+
+    return constant_time_compare(click_hash, expected_mac)
+
+
+def get_click_url_hmac(link, click_url):
+    secret = g.secrets["adserver_click_url_secret"]
+    data = "|".join([link._fullname, click_url])
+
+    return hmac.new(secret, data, hashlib.sha256).hexdigest()
+
+
 def add_trackers(items, sr, adserver_click_urls=None):
     """Add tracking names and hashes to a list of wrapped promoted links."""
     adserver_click_urls = adserver_click_urls or {}
     for item in items:
         if not item.promoted:
             continue
+
+        if item.campaign is None:
+            item.campaign = NO_CAMPAIGN
 
         tracking_name_fields = [item.fullname, item.campaign]
         if not isinstance(sr, FakeSubreddit):
@@ -240,7 +265,12 @@ def add_trackers(items, sr, adserver_click_urls=None):
         # also overwrite the permalink url with redirect click_url for selfposts
         if item.is_self:
             item.permalink = click_url
-
+        else:
+            # add encrypted click url to the permalink for comments->click
+            item.permalink = update_query(item.permalink, {
+                "click_url": url,
+                "click_hash": get_click_url_hmac(item, url),
+            })
 
 def update_promote_status(link, status):
     queries.set_promote_status(link, status)
@@ -320,7 +350,8 @@ def new_campaign(link, dates, bid, cpm, target, frequency_cap, frequency_cap_dur
 
 
 def free_campaign(link, campaign, user):
-    auth_campaign(link, campaign, user, -1)
+    auth_campaign(link, campaign, user, freebie=True)
+
 
 def edit_campaign(link, campaign, dates, bid, cpm, target, frequency_cap,
                   frequency_cap_duration, priority, location, platform='desktop',
@@ -451,7 +482,7 @@ def void_campaign(link, campaign, reason):
             emailer.void_payment(link, campaign, reason)
 
 
-def auth_campaign(link, campaign, user, pay_id):
+def auth_campaign(link, campaign, user, pay_id=None, freebie=False):
     """
     Authorizes (but doesn't charge) a bid with authorize.net.
     Args:
@@ -466,8 +497,13 @@ def auth_campaign(link, campaign, user, pay_id):
     Returns: (True, "") if successful or (False, error_msg) if not. 
     """
     void_campaign(link, campaign, reason='changed_payment')
-    trans_id, reason = authorize.auth_transaction(campaign.bid, user, pay_id,
-                                                  link, campaign._id)
+
+    if freebie:
+        trans_id, reason = authorize.auth_freebie_transaction(
+            campaign.bid, user, link, campaign._id)
+    else:
+        trans_id, reason = authorize.auth_transaction(
+            campaign.bid, user, pay_id, link, campaign._id)
 
     if trans_id and not reason:
         text = ('updated payment and/or bid for campaign %s: '
@@ -868,13 +904,12 @@ def refund_campaign(link, camp, billable_amount, billable_impressions):
         return
 
     owner = Account._byID(camp.owner_id, data=True)
-    try:
-        success = authorize.refund_transaction(owner, camp.trans_id,
-                                               camp._id, refund_amount)
-    except authorize.AuthorizeNetException as e:
+    success, reason = authorize.refund_transaction(
+        owner, camp.trans_id, camp._id, refund_amount)
+    if not success:
         text = ('%s $%s refund failed' % (camp, refund_amount))
         PromotionLog.add(link, text)
-        g.log.debug(text + ' (response: %s)' % e)
+        g.log.debug(text + ' (reason: %s)' % reason)
         return
 
     text = ('%s completed with $%s billable (%s impressions @ $%s).'
