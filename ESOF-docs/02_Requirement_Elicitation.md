@@ -12,7 +12,7 @@ https://github.com/Wargyy/reddit
 ## Navigation
 
 * [Requirement Elicitation](#requirement-elicitation)
-* [Domain and Use-Cases Diagram](#domain-and-use-cases-diagram)
+* [Use-Cases Diagram](#use-cases-diagram)
 
 [... Return to Chapter Select](Chapter_Select.md)
 
@@ -24,9 +24,5 @@ By observing what the users share and how they do it, the service is developed t
 
 Additionally, a part of the website, is dedicated for users to submit their suggestions and feature requests, this is done through the [ideasfortheadmins](https://www.reddit.com/r/ideasfortheadmins/) subreddit.
 
-## Domain and Use-Cases Diagram
-
-### Use-Cases Diagram
-![Use-Cases Diagram](./diagrams/UseCaseDiagram.png)
-
-Work in Progress
+## Use-Cases Diagram
+[Use-Cases Diagram](./diagrams/UseCaseDiagram.png)
