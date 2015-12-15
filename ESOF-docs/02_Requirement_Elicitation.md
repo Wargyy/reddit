@@ -26,7 +26,7 @@ Additionally, a part of the website, is dedicated for users to submit their sugg
 
 ## Domain and Use-Cases Diagram
 
-## Use-Cases Diagram
+# Use-Cases Diagram
 ![Use-Cases Diagram](./diagrams/UseCaseDiagram.png)
 
 Work in Progress
