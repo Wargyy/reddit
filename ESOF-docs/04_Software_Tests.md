@@ -16,6 +16,8 @@ https://github.com/Wargyy/reddit
 
 [... Return to Chapter Select](Chapter_Select.md)
 
+## Software Tests
+
 ## Degree of Testability of the Software
 The Reddit software makes use of a collection of Unit tests that verify nearly all or most of the core functionalities of it, and can be found under the ``reddit/r2/r2/tests/`` directory of the repository.
 
