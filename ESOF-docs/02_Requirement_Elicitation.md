@@ -25,4 +25,4 @@ By observing what the users share and how they do it, the service is developed t
 Additionally, a part of the website, is dedicated for users to submit their suggestions and feature requests, this is done through the [ideasfortheadmins](https://www.reddit.com/r/ideasfortheadmins/) subreddit.
 
 ## Use-Cases Diagram
-[Use-Cases Diagram](./diagrams/UseCaseDiagram.png)
+![Use-Cases Diagram](./diagrams/UseCaseDiagram.png)
